@@ -96,9 +96,11 @@ u'abcdefgh1 abcdefgh2\nabcdefgh3\xa0abcdefgh4\xa0abcdefgh5\nabcdefgh6'
 
 import re
 import sys
+from SilverCity.ScintillaConstants import (SCE_UDL_SSL_COMMENTBLOCK)
 
 TABWIDTH = 8
 
+blockCommentLineIndentRe = re.compile("(\s*?(?:\*)\s*)(.*)")
 class Line(unicode):
     r"""Line objects are "smart" wrappers around lines.  They know about
     all of the indentation-related semantics of the line, such as:
@@ -109,6 +111,7 @@ class Line(unicode):
         to the space "after" the bullet is.
         
     >>> t = Line("   * and so on")
+    >>> t.checkforblockcomment(lineStyle, langCommentStyles)
     >>> t.iswhitespace
     False
     >>> t.bulleted
@@ -149,7 +152,6 @@ class Line(unicode):
         if self.iscode:
             self.iscomment = False
             self.bulleted = False
-        self.isBlockComment = False
         self.iscomment, self.commentIndent = findcomment(line)
         if self.iscomment:
             self.bulleted, self.bullet = findbullet(line[len(self.commentIndent):])
@@ -165,6 +167,31 @@ class Line(unicode):
                 self.indentWidths = [self.leadingIndentWidth, len(self.bullet)]
         else:
             self.indentWidths = [self.leadingIndentWidth]
+        self.isBlockComment = False
+
+    def checkforblockcomment(self, lineStyle, langCommentStyles):
+        if lineStyle in langCommentStyles and lineStyle == SCE_UDL_SSL_COMMENTBLOCK:
+            self.markasblockcomment()
+
+    def markasblockcomment(self):
+        line = self._line
+        self.isBlockComment = True
+        # If not already detected as a comment
+        if not self.iscomment:
+            self.indentWidths = []
+            self.iscomment = True
+            match = blockCommentLineIndentRe.match(line)
+            if match:
+                self.commentIndent = match.groups(1)[0]
+            self.bulleted, self.bullet = findbullet(line[len(self.commentIndent):])
+            self.leadingIndent = self.commentIndent
+            self.leadingIndentWidth = len(self.leadingIndent)
+            if self.bulleted:
+                if self.iscomment:
+                    self.indentWidths = [self.leadingIndentWidth, len(self.commentIndent) + len(self.bullet)]
+            else:
+                self.indentWidths = [self.leadingIndentWidth]
+
     def uncomment(self):
         line = Line(self._line[len(self.commentIndent):])
         line.iscomment = self.iscomment
@@ -256,27 +283,6 @@ def findcode(line):
         return True, match.groups(1)[0]
     else:
         return False, line
-
-commentLineIndentRe = re.compile("(\s*?(?:\*)\s*)(.*)")
-class BlockCommentLine(Line):
-    def __init__(self, line):
-        Line.__init__(self, line)
-        self.isBlockComment = True
-        # If not already detected as a comment
-        if not self.iscomment:
-            self.indentWidths = []
-            self.iscomment = True
-            match = commentLineIndentRe.match(line)
-            if match:
-                self.commentIndent = match.groups(1)[0]
-            self.bulleted, self.bullet = findbullet(line[len(self.commentIndent):])
-            self.leadingIndent = self.commentIndent
-            self.leadingIndentWidth = len(self.leadingIndent)
-            if self.bulleted:
-                if self.iscomment:
-                    self.indentWidths = [self.leadingIndentWidth, len(self.commentIndent) + len(self.bullet)]
-            else:
-                self.indentWidths = [self.leadingIndentWidth]
 
 class Para(list):
     r"""
@@ -542,10 +548,10 @@ class Paragraphize(list):
         list.__init__(self)
         # convert to Line objects (they know all we need to know about themselves
         lines = text.expandtabs(TABWIDTH).splitlines(1)
+        lines = [Line(line) for line in lines]
         if isBlockComment:
-            lines = [BlockCommentLine(line) for line in lines]
-        else:
-            lines = [Line(line) for line in lines]
+            for line in lines:
+                line.markasblockcomment()
         if not lines: return # no text
         currentPara = Para(lines[0])
         self.append(currentPara)
