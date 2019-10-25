@@ -67,7 +67,7 @@ index c3294e8..f948403 100644
 +                    self._values[stat_key] = self._parse_value(raw_value)
 +                    break
 +            else:
-+                raise ValueError('Failed to parse ccache stats output: %s' % line)
++                print 'ccache stats ignored output: %s' # Ignore other lines
  
      @staticmethod
      def _strip_prefix(line, prefix):
