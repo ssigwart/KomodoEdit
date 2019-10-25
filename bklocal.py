@@ -2664,8 +2664,10 @@ class SourceId(black.configure.Datum):
         stdout = o.read()
         retval = o.close()
         if retval:
-            raise black.configure.ConfigureError(
-                "error running '%s'" % cmd)
+            # Mirror mozilla/build.py, which returns 0 on failure
+            self.value = 0
+            self.determined = 1
+            return
         self.value = stdout.strip()
         self.determined = 1
 
